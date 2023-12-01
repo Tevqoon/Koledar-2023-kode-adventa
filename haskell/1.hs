@@ -11,8 +11,8 @@ fix = until =<< ((==) =<<)
 
 -- Add back the last letter in order to facilitate examples like threeight.
 -- All nonnumerics get filtered
-alphas =   (map T.pack ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"])
-numerics = (map T.pack ["1e", "2o", "3e", "4r", "5e", "6x", "7n", "8t", "9e"])
+alphas   = (map T.pack ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"])
+numerics = (map T.pack ["o1e", "t2o", "t3e", "f4r", "f5e", "s6x", "s7n", "e8t", "n9e"])
 
 -- Make a list of replacers and fold fix over them.
 replaceAlphas :: String -> String
@@ -20,7 +20,7 @@ replaceAlphas input = T.unpack $ foldr fix (T.pack input) (zipWith T.replace alp
 
 -- Sum the first and last digits in each string
 solver :: [String] -> Int
-solver = sum . map (\(x:xs) -> read [x, last xs])
+solver = sum . map (\x -> read [head x, last x])
 
 main :: IO ()
 main = do
