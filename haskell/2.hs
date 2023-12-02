@@ -3,14 +3,7 @@ import Data.List.Split
 import Algebra.Lattice
 import Numeric.Natural
 
-data Cubes = Cubes { red :: Natural, green :: Natural, blue :: Natural} deriving (Show, Eq)
-
--- Pointwise addition forms a monoid
-instance Semigroup Cubes where
-  (Cubes r1 g1 b1) <> (Cubes r2 g2 b2) = Cubes (r1 + r2) (g1 + g2) (b1 + b2)
-
-instance Monoid Cubes where
-  mempty = Cubes 0 0 0
+data Cubes = Cubes { red :: Natural, green :: Natural, blue :: Natural } deriving (Show, Eq)
 
 -- The componentwise maximum and minimum form a lattice
 instance Lattice Cubes where
@@ -19,9 +12,9 @@ instance Lattice Cubes where
   -- slightly annoying we can't siply define a join semilattice
 
 instance BoundedJoinSemiLattice Cubes where
-  bottom = mempty
+  bottom = Cubes 0 0 0
 
-data Game = Game { id_num :: Natural, moves :: [Cubes] } deriving (Show)
+data Game = Game { id_num :: Natural, moves :: Cubes } deriving (Show)
 
 -- From something like " 10 blue"
 readColor :: String -> Cubes
@@ -32,37 +25,32 @@ readColor pull = case splitOn " " pull of
                           "blue"  -> Cubes 0 0 (read value)
                           _       -> error "Bad pattern in color matcher."
 
--- Each pull's colors converted into Cubes, then summed as cubes into a complete hand
-processCubes :: String -> Cubes
-processCubes = foldMap readColor . splitOn ","
-
 -- From something like "Game 37"
 extractId :: String -> Natural
 extractId = read . dropWhile (not . isDigit)
 
--- Makes a game with the given id and a list of hands for that game
+-- Makes a game with the given id and a hand with the maximal value of each color
 lineToGame :: String -> Game
 lineToGame line = Game {id_num = extractId game_id,
-                        moves = map processCubes hands}
+                        moves = joins $ map readColor hands}
   where
-    game_id : hands = splitOneOf ":;" line
+    game_id : hands = splitOneOf ":;," line
+    -- This split gives a list with the id in the head and the moves in the tail
 
--- Check that all of the pulls in a game are possible - all the pulls must be geq to target
-checkGame :: Cubes -> Game -> Bool
-checkGame target = all (flip joinLeq target) . moves
+tolerance = Cubes 12 13 14
 
--- Sum the ids of possible games - here the explicit target is used
+-- Sum the ids of all games with at least enough cubes
 solver1 :: [Game] -> Natural
-solver1 = sum . map id_num . filter (checkGame (Cubes 12 13 14))
+solver1 = sum . map id_num . filter (flip joinLeq tolerance . moves)
 
 power :: Cubes -> Natural
 power (Cubes r g b) = r * g * b
 
 -- The semilatice structure allows a simple join (pointwise maximum)
--- of all the moves of a game. Then simply sum the powers.
+-- of all the processed games. Then simply sum the powers.
 solver2 :: [Game] -> Natural
-solver2 = sum . map (power . joins . moves)
-
+solver2 = sum . map (power . moves)
+ 
 readFileLines :: FilePath -> IO [String]
 readFileLines = fmap lines . readFile
 
@@ -70,5 +58,6 @@ main :: IO ()
 main = do
   contents <- readFileLines "../inputs/day2.txt"
   let games = map lineToGame contents
+  -- print games
   print $ solver1 games
   print $ solver2 games
