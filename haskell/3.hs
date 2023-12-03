@@ -2,22 +2,20 @@ import Data.Char
 import Data.List
 import Data.Matrix
 import Data.Maybe
+import Data.Containers.ListUtils (nubOrd)
+
+type Indices = (Int, Int)
+type IndexNum = [Indices]
+type Schematic = Matrix Char
+type Symbols = String
 
 -- Returns the 9 coordinates around the given one
-getNeighbors :: (Int, Int) -> [(Int, Int)]
+getNeighbors :: Indices -> [Indices]
 getNeighbors (x, y) = [(x + i, y + j) | i <- [-1..1], j <- [-1..1], (i, j) /= (0, 0)]
 
--- O(n log n) nub
-fastNub :: [(Int, Int)] -> [(Int, Int)]
-fastNub = map head . group . sort
-
 -- Gives all the coordinates around the supplied ones
-allNeighbors :: [(Int, Int)] -> [(Int, Int)]
-allNeighbors = fastNub . (getNeighbors =<<)
-
--- Extracts all nonnumeric non . symbols out of a given char matrix
-symbols :: Matrix Char -> String
-symbols = nub . filter (not . isDigit) . filter ('.'/=) . toList
+allNeighbors :: [Indices] -> [Indices]
+allNeighbors = nubOrd . (getNeighbors =<<)
 
 -- From a list of Maybe values, accumulate contiguous justs into lists and drop nothings
 extractJust :: [Maybe a] -> [[a]]
@@ -27,42 +25,57 @@ extractJust xs = (catMaybes justs) : extractJust rest
   where
     (justs, rest) = span isJust xs
 
+-- If the predicate holds on the second argument, return the first argument.
+predMaybe :: (b -> Bool) -> a -> b -> Maybe a
+predMaybe p x v
+  | p v       = Just x
+  | otherwise = Nothing
+
 -- Returns the number represented by the indices in the supplied list in matrix
-indicesNum :: Matrix Char -> [(Int, Int)] -> Int
+indicesNum :: Schematic -> IndexNum -> Int
 indicesNum m = read . map (m!)
 
 -- Scans the matrix for contiguous numbers and returns their index list
-getNums :: Matrix Char -> [[(Int, Int)]]
-getNums = extractJust . toList . mapPos (\i v -> if isDigit v then Just i else Nothing)
+getNums :: Schematic -> [IndexNum]
+getNums m = filter (not . null) $ extractJust $ toList num_mat
+  where num_mat =  mapPos (predMaybe isDigit) m
 
 -- A safe get which takes in a pair instead of two values
+safeGet1 :: Matrix a -> Indices -> Maybe a
 safeGet1 m (x, y) = safeGet x y m
 
 -- Tests whether the given number in the matrix touches a symbol
-testNum m sym is = not $ null $ intersect sym $ mapMaybe (safeGet1 m) (allNeighbors is)
+testNum :: Schematic -> Symbols -> IndexNum -> Bool
+testNum m symb is = not $ null $ intersect symb $ mapMaybe (safeGet1 m) (allNeighbors is)
+
+-- Extracts all nonnumeric non '.' symbols out of a given char matrix
+symbols :: Schematic -> Symbols
+symbols = nub . filter (not . isDigit) . filter ('.'/=) . toList
 
 -- Sums all the numbers touching symbols
-solve1 m = sum $ map (indicesNum m) $ filter (testNum m symb) nums
+solve1 :: Schematic -> Int
+solve1 m = sum . map (indicesNum m) . filter (testNum m symb) $ nums
   where nums = getNums m
         symb = symbols m
 
 -- Get the indices of all the stars in a matrix
-getStars :: Matrix Char -> [(Int, Int)]
-getStars = catMaybes . toList . mapPos (\(x, y) v -> if (=='*') v then Just (x, y) else Nothing)
+getStars :: Schematic -> [Indices]
+getStars = catMaybes . toList . mapPos (predMaybe (=='*'))
 
 -- If the gear touches exactly two numbers, multiply them.
-processGear :: Matrix Char -> [[(Int, Int)]] -> (Int, Int) -> Maybe Int
+processGear :: Schematic -> [IndexNum] -> Indices -> Maybe Int
 processGear m nums gear = case touching of 
-                          x:y:[] -> Just (x * y)
+                          [x, y] -> Just (x * y)
                           _      -> Nothing
   where touching = map (indicesNum m) (touchingNums gear nums)
 
 -- Get all the numbers touching the given index
-touchingNums :: (Int, Int) -> [[(Int, Int)]] -> [[(Int, Int)]]
+touchingNums :: Indices -> [IndexNum] -> [IndexNum]
 touchingNums gear = filter (not . null . intersect (getNeighbors gear))
 
 -- Get the sum of all the valid gear ratios
-solve2 m = sum $ mapMaybe (processGear m nums) stars
+solve2 :: Schematic -> Int
+solve2 m = sum . mapMaybe (processGear m nums) $ stars
   where nums = getNums m
         stars = getStars m
 

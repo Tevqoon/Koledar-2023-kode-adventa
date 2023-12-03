@@ -46,8 +46,8 @@ solver1 = sum . map id_num . filter (flip joinLeq tolerance . moves)
 power :: Cubes -> Natural
 power (Cubes r g b) = r * g * b
 
--- The semilatice structure allows a simple join (pointwise maximum)
--- of all the processed games. Then simply sum the powers.
+-- The semilatice structure allows us to immediately sum the powers
+-- of the processed games.
 solver2 :: [Game] -> Natural
 solver2 = sum . map (power . moves)
  
