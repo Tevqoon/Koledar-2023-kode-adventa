@@ -1,4 +1,4 @@
-import Data.Char (isDigit)
+import Data.Char
 import Data.List
 import Data.Matrix
 import Data.Maybe
@@ -11,11 +11,11 @@ type Symbols = String
 
 -- Returns the 9 coordinates around the given one
 getNeighbors :: Indices -> [Indices]
-getNeighbors (x, y) = [(x + i, y + j) | i <- [-1..1], j <- [-1..1]]
+getNeighbors (x, y) = [(x + i, y + j) | i <- [-1..1], j <- [-1..1], (i, j) /= (0, 0)]
 
 -- Gives all the coordinates around the supplied ones
 allNeighbors :: [Indices] -> [Indices]
-allNeighbors = nubOrd . (getNeighbors =<<)
+allNeighbors indices = nubOrd $ getNeighbors =<< indices
 
 -- From a list of Maybe values, accumulate contiguous justs into lists and drop nothings
 extractJust :: [Maybe a] -> [[a]]
@@ -50,14 +50,14 @@ testNum m symb is = not $ null $ intersect symb neighborValues
   where neighborValues = mapMaybe (safeGet1 m) (allNeighbors is)
 
 -- Extracts all nonnumeric non '.' symbols out of a given char matrix
-getSymbols :: Schematic -> Symbols
-getSymbols = nub . filter (not . isDigit) . filter ('.'/=) . toList
+symbols :: Schematic -> Symbols
+symbols = nub . filter (not . isDigit) . filter ('.'/=) . toList
 
--- Sums all the numbers touching the symbols
+-- Sums all the numbers touching symbols
 solve1 :: Schematic -> Int
 solve1 m = sum . map (indicesNum m) . filter (testNum m symb) $ nums
   where nums = getNums m
-        symb = getSymbols m
+        symb = symbols m
 
 -- Get the indices of all the stars in a matrix
 getStars :: Schematic -> [Indices]
@@ -65,7 +65,7 @@ getStars = catMaybes . toList . mapPos (predMaybe (=='*'))
 
 -- If the gear touches exactly two numbers, multiply them.
 processGear :: Schematic -> [IndexNum] -> Indices -> Maybe Int
-processGear m nums gear = case touching of
+processGear m nums gear = case touching of 
                           [x, y] -> Just (x * y)
                           _      -> Nothing
   where touching = map (indicesNum m) (touchingNums gear nums)
