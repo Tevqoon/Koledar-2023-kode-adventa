@@ -59,7 +59,8 @@ destinations = mapMaybe . checkAssoc
 
 -- Lifts the destinations function to work on a list of ranges
 rangesDest :: [Range] -> [Entry] -> [Range]
-rangesDest range entries = range >>= flip destinations entries
+rangesDest = (. (flip destinations)) . (>>=)
+-- rangeDest range entries = range >>= flip destination entries
 
 -- Walks each range through the maps monadically
 totalDestination :: [Range] -> [[Entry]] -> [Range]
