@@ -46,6 +46,7 @@ winnings rank h = rank * (bid h)
 
 solver1 = sum . zipWith winnings [1..] . sort
 
+-- Bruh moment ahead
 data JHand = JHand {jhand :: [Int], jbid :: Int} deriving (Eq, Show, Read)
 
 instance Ord JHand where
