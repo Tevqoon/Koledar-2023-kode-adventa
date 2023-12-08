@@ -1,60 +1,45 @@
-import Data.List
-import Data.List.Split
-import Data.Char
+import Data.List.Split (splitOn, chunksOf)
+import Data.Char (isAlpha)
+import Data.Bifunctor (bimap)
 import qualified Data.Map.Strict as M
 
 type Location = String
-type Command = Char
-type Direction = (String, (String, String))
+type Commands = String
 type Directions = M.Map Location (Location, Location)
 
--- Checks the third character of location
-locationIs :: Char -> Location -> Bool
-locationIs c = (==c) . (!!2)
+-- Ints are a monoid under lcm
+instance Semigroup Int where (<>) = lcm
+instance Monoid Int where mempty = 1
 
--- Converts a L or R command to the relevant projection
-stepToCommand :: Command -> ((a, a) -> a)
-stepToCommand 'L' = fst
-stepToCommand 'R' = snd
+isC :: Char -> Location -> Bool
+isC = (.last) . (==)
 
-listToTuple :: [Location] -> Direction
-listToTuple [a, b, c] = (a, (b, c))
-
--- Gives a location from the supplied line
-processLine :: String -> Direction
-processLine = listToTuple . chunksOf 3 . filter isAlpha
-
--- Cuts up the file into a cyclic list of commands, a Map of directions, and a list of A-locations
-processFile :: String -> ([Command], Directions, [Location])
-processFile file = (cycle steps,
-                    M.fromList pairList,
-                    map fst $ filter (locationIs 'A' . fst) pairList)
-  where [steps, graph] = splitOn "\n\n" file
-        pairList = map processLine $ lines graph
-
--- Does one step; maps location to the next location
-step :: Directions -> Command -> Location -> Location
-step graph command = (stepToCommand command) . (graph M.!) 
+-- Cuts up the file into a cyclic list of commands and a Map of directions
+parse :: String -> (Commands, Directions)
+parse = bimap cycle (M.fromList . map graph . lines) . tuple . splitOn "\n\n"
+  where graph = (\[a,b,c]->(a,(b,c))) . chunksOf 3 . filter isAlpha
+        tuple = \[x, y] -> (x, y)
 
 -- Counts the number of steps needed to go from the starting location to reach the end condition
-stepper :: Directions -> (String -> Bool) -> [Command] -> Location -> Int
-stepper graph condition commands location = aux 0 commands location
-  where aux stepNum (command:commands) location
-          | condition location = stepNum
-          | otherwise = aux (succ stepNum) commands (step graph command location)
+steps :: (Commands, Directions) -> Location -> Int
+steps (commands, graph) = aux 0 commands
+  where aux n (c:cs) l
+          | isC 'Z' l = n
+          | otherwise = aux (succ n) cs step
+          where step = next $ graph M.! l
+                next = if c == 'L' then fst else snd
 
 -- Number of steps from AAA to ZZZ
-solver1 :: Directions -> [Command] -> Int
-solver1 graph commands = stepper graph (=="ZZZ") commands "AAA"
+solver1 :: (Commands, Directions) -> Int
+solver1 = flip steps "AAA"
 
--- Number of steps from each XXA to XXZ; keeping in mind permutation order is the lcm of its cycles
-solver2 :: Directions -> [Command] -> [Location] -> Int
-solver2 graph commands = foldr lcm 1 . map (stepper graph (locationIs 'Z') commands)
+-- Number of steps from each XXA to XXZ; lcm works on input
+solver2 :: (Commands, Directions) -> [Location] -> Int
+solver2 = foldMap . steps
     
 main :: IO ()
 main = do
-  contents <- readFile "../inputs/day8.txt"
-  -- contents <- readFile "../inputs/ex8.txt"
-  let (moves, graph, starting) = processFile contents
-  print $ solver1 graph moves
-  print $ solver2 graph moves starting
+  navi@(_, graph) <- parse <$> readFile "../inputs/day8.txt"
+  print $ solver1 navi
+  let starting = (filter (isC 'A') $ M.keys graph)
+  print $ solver2 navi starting
