@@ -1,10 +1,10 @@
 import Data.List
 import Data.Maybe
-import Data.Array
+import Data.Matrix
 import Data.Set qualified as S
 
 type Coord = (Int, Int)
-type Board = Array Coord Char
+type Board = Matrix Char
 type Loop = S.Set Coord
 
 
@@ -28,50 +28,19 @@ getNext m ((x, y), previous) = (head possible, (x, y))
                                               ((x + 1, y), ['|', 'J', 'L']),
                                               ((x - 1, y), ['|', '7', 'F'])]
 
-fromList :: [a] -> Array Coord a
-fromList l = listArray ((1, 1), (up, up)) l
-  where up = round $ sqrt $ fromIntegral $ length l
-
-fromLists :: [[a]] -> Array Coord a
-fromLists l = listArray ((1, 1), (length l, length (head l))) (concat l)
-
-toList :: Array Coord a -> [a]
-toList = elems
-
-toLists :: Board -> [[Char]]
-toLists arr = 
-  [[arr ! (i, j) | j <- [minJ..maxJ]] | i <- [minI..maxI]]
-  where
-    is = bounds arr
-    minI = fst $ fst is
-    maxI = fst $ snd is
-    minJ = snd $ fst is
-    maxJ = snd $ snd is
-
-mapPos :: (Coord -> Char -> Char) -> Board -> Board
-mapPos f arr = array (bounds arr) [(coord, f coord (arr ! coord)) | coord <- indices arr]
-
 -- A safe get which takes in a pair instead of two values
-safeGet1 :: Board -> Coord -> Maybe Char
-safeGet1 m (ix, iy) = case i1x <= ix && ix <= i2x && i1y <= iy && iy <= i2y of
-  False -> Nothing
-  True  -> Just (m ! (ix, iy))
-  where ((i1x, i1y), (i2x, i2y)) = bounds m
-  
-
-findLoop1 :: Board -> [(Coord, Char)]
-findLoop1 m = map (\(x,y) -> ((x, y), m ! (x, y))) $ map fst $ take cutoff walking
-  where walking = iterate (getNext m) (start, start)
-        cutoff = succ $ fromJust $ findIndex (\((x, y), _) -> (x, y) == start) (tail walking)
-        start = findStart m
+safeGet1 :: Matrix a -> Coord -> Maybe a
+safeGet1 m (x, y) = safeGet x y m  
 
 findLoop :: Board -> [Coord]
 findLoop m = map fst $ w : takeWhile (\(x, _) -> x /= start) ws
   where w:ws = iterate (getNext m) (start, (0, 0))
         start = findStart m
 
-findStart :: Board -> Coord
-findStart m = fst $ fromJust $ find (\(i, v) -> v == 'S') $ assocs m
+findStart :: Matrix Char -> Coord
+findStart m = fromJust $ fromJust $ find isJust $ toList positions
+  where
+    positions = mapPos (\c v -> if v == 'S' then Just c else Nothing) m
 
 solver1 m = (length $ findLoop m) `div` 2
 
@@ -84,9 +53,9 @@ ignoreOffLoop :: Loop -> (Coord, Char) -> Char
 ignoreOffLoop = mapToLoop (\tf x -> if tf then x else '.')
 
 eraseOffLoop :: Loop -> Board -> Board
-eraseOffLoop loop = mapPos (\pos char -> ignoreOffLoop loop (pos, char))
+eraseOffLoop loop = mapPos $ curry $ (ignoreOffLoop loop)
 
--- make3x3 :: Char -> [String]
+make3x3 :: Char -> [String]
 make3x3 '|' = [" * ", " * ", " * "]
 make3x3 '-' = ["   ", "***", "   "]
 make3x3 'L' = [" * ", " **", "   "]
@@ -101,6 +70,7 @@ make3x3 'S' = ["   ", "***", "   "]
 
 symbolifyLine :: [Char] -> [String]
 symbolifyLine = map (foldl1 (++)) . Data.List.transpose . map make3x3 
+-- symbolifyLine = map (foldl1 (++)) . map (concatMap id) . map make3x3
 
 symbolify :: Board -> Board
 symbolify = fromLists . (symbolifyLine=<<) . toLists
@@ -109,29 +79,22 @@ prepare :: Loop -> Board -> Board
 prepare loop = symbolify . eraseOffLoop loop
 
 isFillChar :: Char -> Maybe Char -> Bool
-isFillChar from maybeChar
-  | maybeChar == Just from = True
-  | otherwise = False
+isFillChar from maybeChar = maybeChar == Just from
     
--- neighbors :: Char -> Board -> Coord -> [Coord]
--- neighbors from board (x, y) = matching
---   where candidates = [(x + dx, y + dy) | dx <- [-1, 0, 1], dy <- [-1, 0, 1], (dx, dy) /= (0, 0)]
---         matching = filter (isFillChar from board) candidates
+floodFill :: Char -> Char -> Board -> Board
+floodFill from to board = mapPos (\pos c -> if pos `S.member` to_replace then to else c) board
+  where to_replace = aux [(1,1)] S.empty
+        aux :: [Coord] -> Loop -> Loop
+        aux [] visited = visited
+        aux (pos:poss) visited
+          | pos `S.member` visited = aux poss visited
+          | otherwise              = aux (neighbors pos ++ poss) (S.insert pos visited)
+        neighbors (x, y) = filter (isFillChar from . (safeGet1 board)) (candidates)
+          where candidates = [(x + dx, y + dy) | (dx, dy) <- [(1,0), (-1, 0), (0, 1), (0, -1)]]
 
-floodFill :: Char -> Char -> Board -> (Board, Int)
-floodFill from to board = (board // [(i, to) | i <- S.toList to_replace], counter)
-  -- mapPos (\pos c -> if pos `S.member` to_replace then to else c) board
-  where (to_replace, counter) = aux [(1,1)] S.empty 0
-        aux :: [Coord] -> Loop -> Int -> (Loop, Int)
-        aux [] visited counter = (visited, counter)
-        aux (pos:poss) visited counter
-          | pos `S.member` visited = aux poss visited counter
-          | otherwise              = aux ((neighbors pos) ++ poss) (S.insert pos visited) (succ counter)
-        neighbors (x, y) = filter (isFillChar from . (safeGet1 board)) candidates
-          where candidates =[(x + dx, y + dy) | dx <- [-1, 0, 1], dy <- [-1, 0, 1]]
+solver2 loop m = count '*' $ toList $ floodFill '*' ' ' $ floodFill ' ' '*' $ (prepare loop m)
 
-solver2 loop m = count '*' $ toList $ fst $ floodFill '*' ' ' $ fst $ floodFill ' ' '*' $ (prepare loop m)
-
+count :: Eq a => a -> [a] -> Int
 count c = length . filter (==c)
                  
 main :: IO ()
@@ -140,14 +103,6 @@ main = do
   let mat = fromLists contents
   let loop = S.fromList $ findLoop mat
   print $ solver1 mat
-  let loop = S.fromList $ findLoop mat
-  -- let symb = prepare loop mat
-  --let (ff1, c1) = floodFill ' ' '*' symb
-  -- let (ff2, c2) = floodFill '*' ' ' ff1
-  -- print $ count '*' $ toList $ symb
-  -- putStrLn ""
-  -- print $ 9 * (length contents) ^ 2
-  -- print c1
   print $ solver2 loop mat
 
 
