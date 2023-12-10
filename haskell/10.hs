@@ -5,7 +5,6 @@ import Data.Maybe
 type Coord = (Int, Int)
 type Board = Matrix Char
 
-
 -- A safe get which takes in a pair instead of two values
 safeGet1 :: Matrix a -> Coord -> Maybe a
 safeGet1 m (x, y) = safeGet x y m
