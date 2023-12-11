@@ -1,42 +1,49 @@
 import Data.List
-import Data.Matrix 
+import Data.Matrix (mapPos, toList, fromLists)
 import Data.Maybe
 
 type Coord = (Int, Int)
 type Board = [[Char]]
 
-copyIfEmpty :: String -> [String]
-copyIfEmpty line
-  | all (=='.') line = [line, line]
-  | otherwise        = [line]
-
-expandRows :: Board -> Board
-expandRows = concatMap copyIfEmpty
-
-expandCols :: Board -> Board
-expandCols = Data.List.transpose . expandRows . Data.List.transpose
-
-expandBoard :: Board -> Board
-expandBoard = expandCols . expandRows
-
-processBoard :: Board -> Matrix Char
-processBoard = fromLists . expandBoard
-
-getCoords :: Matrix Char -> [(Int, Int)]
-getCoords = catMaybes . toList . mapPos (\pos c -> if c == '#' then Just pos else Nothing)
+getCoords :: Board -> [Coord]
+getCoords = catMaybes . toList . mapPos (\pos c -> if c == '#' then Just pos else Nothing) . fromLists
 
 manhattan :: Coord -> Coord -> Int
 manhattan (x1, y1) (x2, y2) = abs(x1 - x2) + abs(y1 - y2)
 
-pairs :: [Coord] -> [(Coord, Coord)]
-pairs l = [(l !! i, l !! j) | i <- [0..length l - 1], j <- [0..i - 1]]
+pairs :: [a] -> [(a, a)]
+pairs l = [(x, y) | (x:ys) <- tails l, y <- ys]
 
-solver1 = sum .map (uncurry manhattan) . pairs . getCoords . processBoard
+getRows :: Board -> [Int]
+getRows = catMaybes . zipWith (\n l -> if all (=='.') l then Just n else Nothing) [0..]
+
+getCols :: Board -> [Int]
+getCols = getRows . transpose
+
+expandRow :: Int -> Int -> [Coord] -> [Coord]
+expandRow by r = map (\(x, y) -> if x > r then (x + by, y) else (x,y))
+
+expandCol :: Int -> Int -> [Coord] -> [Coord]
+expandCol by c = map (\(x, y) -> if y > c then (x, y + by) else (x,y))
+
+expandWith :: (Int -> Int -> [Coord] -> [Coord]) -> Int -> [Int] -> [Coord] -> [Coord]
+expandWith f by [] coords     = coords
+expandWith f by (x:xs) coords = expandWith f by (map (+by) xs) (f by x coords)
+
+expand :: Int -> Board -> [Coord]
+expand by board = exCols . exRows $ coords
+  where coords = getCoords board
+        exRows = expandWith expandRow by (getRows board)
+        exCols = expandWith expandCol by (getCols board)
+
+solver :: Int -> Board -> Int
+solver by = sum . map (uncurry manhattan) . pairs . expand by
 
 main :: IO ()
 main = do
   contents <- lines <$> readFile "../inputs/day11.txt"
-  print $ solver1 contents
+  print $ solver 1 contents
+  print $ solver (1000000 - 1) contents
 
 test = ["...#......",
         ".......#..",
