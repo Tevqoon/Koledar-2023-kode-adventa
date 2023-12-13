@@ -1,56 +1,39 @@
-import Data.Matrix
 import Data.List
-import Data.List.Split
-import Data.Maybe
+import Data.List.Split (splitOn)
+import Data.Maybe (fromMaybe)
 
 parse :: String -> [[String]]
 parse = map lines . splitOn "\n\n"
 
-check :: [String] -> [String] -> Maybe Int
-check half1 half2
-  | reflects  = Just (length half1)
-  | otherwise = Nothing
-  where reflects = all id $ zipWith (==) (reverse half1) half2
+-- Number of different characters of two strings
+hamming :: String -> String -> Int
+hamming s1 s2 = length $ filter id $ zipWith (/=) s1 s2
 
-findHorizontal :: [String] -> [Int]
-findHorizontal board = mapMaybe (\i -> uncurry check $ splitAt i board) [1..length board - 1]
+-- Checks if the current halves form a mirror with exactly tol smudges
+-- Entering 1 will mean the old reflection is no longer valid by default, which exactly finds the smudge.
+check :: Int -> [String] -> Int -> Bool
+check tol board n = totalDist == tol
+  where totalDist = sum $ zipWith hamming (reverse half1) half2
+        (half1, half2) = splitAt n board
 
-findVertical :: [String] -> [Int]
-findVertical = findHorizontal . Data.List.transpose
+-- Finds a mirror index. If not, returns 0
+findHorizontal :: Int -> [String] -> Int
+findHorizontal tol board = fromMaybe 0 $ find (check tol board) [1..length board - 1]
 
-sumMirs [] ver = (head ver)
-sumMirs hor [] = 100 * (head hor)
+-- Vertical splits are horizontal splits of the transpose
+findVertical :: Int -> [String] -> Int
+findVertical = (.transpose) . findHorizontal
 
-solver1 boards = sum $ zipWith sumMirs horzs verts
-  where horzs = map findHorizontal boards
-        verts = map findVertical   boards
-
-other '.' = '#'
-other '#' = '.'
-
--- Just check all of the changed boards lol
-allSmudges board = map (smudge board) coords
-  where coords = [(x, y) | x <- [1..length board], y <- [1.. length (head board)]]
-        smudge board spos = toLists $ mapPos (\pos v -> if pos == spos then other v else v) m 
-          where m = fromLists board
-
--- Simply get all the changed boards and remove the unchanged lines. What remains is the new line.
-processOne board = sumMirs totalHor totalVer
-  where smudges = allSmudges board
-        regularHor = findHorizontal board
-        regularVer = findVertical   board
-        smudgedHor = nub $ smudges >>= findHorizontal
-        smudgedVer = nub $ smudges >>= findVertical
-        totalHor = smudgedHor \\ regularHor
-        totalVer = smudgedVer \\ regularVer
-
-solver2 = sum . map processOne
+-- We can sum all because non-mirrors are 0
+solver tol boards = sum horzs + sum verts
+  where horzs = map ((*100) . findHorizontal tol) boards
+        verts = map (findVertical tol)   boards
 
 main :: IO ()
 main = do
   contents <- parse <$> readFile "../inputs/day13.txt"
-  print $ solver1 contents
-  print $ solver2 contents
+  print $ solver 0 contents
+  print $ solver 1 contents
   
 test = [["#.##..##.",
          "..#.##.#.",
