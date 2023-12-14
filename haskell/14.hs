@@ -14,22 +14,8 @@ type Coords = S.Set Coord
 type Dimensions = (Int, Int)
 data Board = Board {circles :: S.Set Coord, cubes :: S.Set Coord, dimensions :: Dimensions} deriving (Eq, Ord, Show)
 
-boardToMat :: Board -> Matrix Char
-boardToMat b@(Board cis cus (dx, dy)) = A.mapPos (\pos _ -> if (pos-(1,1)) `S.member` cis then 'O' else
-                                               if (pos-(1,1)) `S.member` cus then '#' else '.') (A.zero dx dy)
-
-printList :: [String] -> IO ()
-printList l = (mapM_ putStrLn l) >> (putStrLn "")
-
-printBoard = printList . toLists . boardToMat
-
 inBounds :: Dimensions -> Coord -> Bool
 inBounds (xm, ym) (x, y) = 0 <= x && x < xm && 0 <= y && y < ym
-
--- isFree :: Dimensions -> Coords -> Coords -> Coord -> Coord -> Bool
--- isFree ds cis cus direction pos
---   | not $ inBounds ds (direction + pos) = False
---   | otherwise = S.notMember pos cis && S.notMember pos cus
 
 parse :: [String] -> Board
 parse b = (Board (S.fromList circles) (S.fromList squares) dims)
@@ -40,36 +26,32 @@ parse b = (Board (S.fromList circles) (S.fromList squares) dims)
 getLoad :: Board -> Int
 getLoad (Board cis cus (xm, ym)) = S.foldr (\(x, y) s -> s + xm - x) 0 cis
 
-coordUpdate :: Coords -> Coords -> Coords -> Coords
-coordUpdate coords toRemove toAdd = S.union toAdd $ coords S.\\ toRemove
-
 -- Premature optimization is the root of all evil.
 partition3 :: (a -> Ordering) -> S.Set a -> (S.Set a, S.Set a, S.Set a)
 partition3 f s = (S.filter (\x -> f x == LT) s, S.filter (\x -> f x == EQ) s, S.filter (\x -> f x == GT) s)
 
 roll :: Coord -> Board -> Board
-roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese cis cis) cus ds
+roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese S.empty cis) cus ds
   where
     rollThese :: Coords -> Coords -> Coords 
     rollThese has adds 
       | S.null adds = has
-      | otherwise   = rollThese (coordUpdate has moving moved) (S.union moved goodChecks)
+      | otherwise   = rollThese (S.union has still) (S.union moved checkAgain)
         where
-          (still, checkAgain, moving) = partition3 (isFree . (+direction)) adds
-          moved = S.map (+direction) moving
-          goodChecks = S.filter (\x -> (x + direction) `S.member` checkAgain || (x + direction) `S.member` moving) checkAgain
-          -- Those over the edge or moving into # are never moving again.
-          -- Those that are moving into O need to be checked again.
-          -- TODO: Make sure to account for fixed elements; something like remove those that still can't move
-          -- and have been there last turn already
-          -- Those with free spaces are free to move
-          isFree pos
-            | not $ inBounds ds pos = LT
-            | S.member pos cus = LT
-            | S.member pos has = EQ
-            | otherwise = GT
-              
+          (still, checkAgain, moving) = partition3 isFree adds
+          -- Partitioning into these that are never moving again, that might move, and that are moving
+          
+          moved = S.map (+direction) moving -- The new coordinates of the points that are moving
+          -- Those who have just moved are always candidates for more movement
 
+          isFree pos
+            | not $ inBounds ds pos' = LT -- if it would go out of bounds,  it never moves again
+            | S.member pos' cus = LT      -- if it would go into a #,       it never moves again
+            | S.member pos' has = LT      -- if it would go into a still O, it never moves again
+            | S.member pos' adds = EQ     -- if going intocandidate,        it might keep going - recheck
+            | otherwise = GT              -- otherwise, it goes into . and it will keep going
+            where pos' = direction + pos
+              
 rollNorth = roll (-1, 0)
 rollSouth = roll (1, 0)
 rollEast = roll (0, 1)
@@ -134,3 +116,18 @@ rolledTest = ["OOOO.#.O..",
               "..O.......",
               "#....###..",
               "#....#...."]
+
+boardToMat :: Board -> Matrix Char
+boardToMat b@(Board cis cus (dx, dy)) = A.mapPos (\pos _ ->
+                                                    if (pos-(1,1)) `S.member` cis
+                                                    then 'O' else
+                                                      if (pos-(1,1)) `S.member` cus
+                                                      then '#' else
+                                                        '.')
+                                        (A.zero dx dy)
+
+printList :: [String] -> IO ()
+printList l = (mapM_ putStrLn l) >> (putStrLn "")
+
+printBoard = printList . toLists . boardToMat
+ 
