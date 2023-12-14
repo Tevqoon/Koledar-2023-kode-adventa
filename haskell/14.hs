@@ -7,8 +7,6 @@ import Data.Bifunctor (bimap)
 import Data.Set qualified as S
 import Data.Map.Strict qualified as M
 
--- type Board = Matrix Char
--- type Board = M.Map (Int, Int) Char
 type Coord = (Int, Int)
 type Coords = S.Set Coord
 type Dimensions = (Int, Int)
@@ -26,12 +24,8 @@ parse b = (Board (S.fromList circles) (S.fromList squares) dims)
 getLoad :: Board -> Int
 getLoad (Board cis cus (xm, ym)) = S.foldr (\(x, y) s -> s + xm - x) 0 cis
 
--- Premature optimization is the root of all evil.
-partition3 :: (a -> Ordering) -> S.Set a -> (S.Set a, S.Set a, S.Set a)
-partition3 f s = (S.filter (\x -> f x == LT) s, S.filter (\x -> f x == EQ) s, S.filter (\x -> f x == GT) s)
-
 roll :: Coord -> Board -> Board
-roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese cus cis) cus ds
+roll direction (Board cis cus ds) = Board (rollThese cus cis) cus ds
   where
     rollThese :: Coords -> Coords -> Coords 
     rollThese has adds 
@@ -39,38 +33,17 @@ roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese cus cis) cus ds
       | otherwise   = rollThese (S.union has nextStill) (S.union movers checkAgain)
         where
          nextUp = S.map (+direction) adds
+         
          (nextInb, nextOob) = S.partition (inBounds ds) nextUp
 
-         nextStill = S.map (\x -> x - direction) $ S.union nextOob $ S.intersection nextInb has -- these are still for sure
+         (stillInb, moveCandidates) = S.partition (`S.member` has) nextInb 
 
-         moveCandidates = nextInb S.\\ has
+         nextStill = S.map (\x -> x - direction) $ S.union nextOob $ stillInb -- these are still for sure
 
-         checkAgain = S.map (\x -> x - direction) $ S.intersection moveCandidates adds
+         (nonmovers, movers) = S.partition (`S.member` adds) moveCandidates
 
-         movers = moveCandidates S.\\ adds
-         
-          -- What we need to check:
-          -- 1: all moving into stills become still
-          -- 2: all moving into # become still -> done by initializing with cubes and removing them at the end
-          -- 3: all moving out of bounds become still
-          -- 4: all moving into current candidates get rechecked
-          -- 5: all the rest increment and get rechecked
+         checkAgain = S.map (\x -> x - direction) $ nonmovers
 
-          
-          -- (still, checkAgain, moving) = partition3 isFree adds
-          -- -- Partitioning into these that are never moving again, that might move, and that are moving
-          -- 
-          -- moved = S.map (+direction) moving -- The new coordinates of the points that are moving
-          -- -- Those who have just moved are always candidates for more movement
-          -- 
-          -- isFree pos
-          --   | not $ inBounds ds pos' = LT -- if it would go out of bounds,  it never moves again
-          --   | S.member pos' cus = LT      -- if it would go into a #,       it never moves again
-          --   | S.member pos' has = LT      -- if it would go into a still O, it never moves again
-          --   | S.member pos' adds = EQ     -- if going into candidate,       it might keep going - recheck
-          --   | otherwise = GT              -- otherwise, it goes into . and it will keep going
-          --   where pos' = direction + pos
-              
 rollNorth = roll (-1, 0)
 rollSouth = roll (1, 0)
 rollEast = roll (0, 1)
@@ -81,27 +54,18 @@ solver1 = getLoad . rollNorth
 
 oneCycle :: Board -> Board
 oneCycle = rollEast . rollSouth . rollWest . rollNorth
-  
-findFirstDuplicate :: Eq a => [a] -> (Int, Int)
-findFirstDuplicate lst = T.trace (show (org, rep)) (org, rep)
-  where rep = fromJust $ findIndex id $ zipWith elem lst (inits lst)
-        org = fromJust $ elemIndex (lst !! rep) lst
 
--- In practice, finding the duplicate is not really a bottleneck as
--- opposed to the actual rotations.
+findFirstDuplicate :: (Enum b, Ord k, Num b) => [k] -> (k, b, b)
+findFirstDuplicate lst = aux M.empty lst 0
+  where
+    aux seen (x:xs) rep = case foundmaybe of
+      Nothing  -> aux (M.insert x rep seen) xs (succ rep)
+      Just org -> (x, org, rep)
+      where foundmaybe = M.lookup x seen
 
--- findFirstDuplicate :: (Enum b, Ord k, Num b) => [k] -> (b, b)
--- findFirstDuplicate lst = aux M.empty lst 0
---   where
---     aux seen (x:xs) rep = case foundmaybe of
---       Nothing  -> aux (M.insert x rep seen) xs (succ rep)
---       Just org -> (org, rep)
---       where foundmaybe = M.lookup x seen
-        
-
-solver2 n l = getLoad $ allCycles !! first_n
+solver2 n l = getLoad b
   where allCycles = iterate oneCycle l
-        (org, rep) = findFirstDuplicate $ allCycles
+        (b, org, rep) = findFirstDuplicate $ allCycles
         first_n = org + mod (n - org) (rep - org)
         
 main :: IO ()
