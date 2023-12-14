@@ -31,26 +31,45 @@ partition3 :: (a -> Ordering) -> S.Set a -> (S.Set a, S.Set a, S.Set a)
 partition3 f s = (S.filter (\x -> f x == LT) s, S.filter (\x -> f x == EQ) s, S.filter (\x -> f x == GT) s)
 
 roll :: Coord -> Board -> Board
-roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese S.empty cis) cus ds
+roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese cus cis) cus ds
   where
     rollThese :: Coords -> Coords -> Coords 
     rollThese has adds 
-      | S.null adds = has
-      | otherwise   = rollThese (S.union has still) (S.union moved checkAgain)
+      | S.null adds = has S.\\ cus
+      | otherwise   = rollThese (S.union has nextStill) (S.union movers checkAgain)
         where
-          (still, checkAgain, moving) = partition3 isFree adds
-          -- Partitioning into these that are never moving again, that might move, and that are moving
-          
-          moved = S.map (+direction) moving -- The new coordinates of the points that are moving
-          -- Those who have just moved are always candidates for more movement
+         nextUp = S.map (+direction) adds
+         (nextInb, nextOob) = S.partition (inBounds ds) nextUp
 
-          isFree pos
-            | not $ inBounds ds pos' = LT -- if it would go out of bounds,  it never moves again
-            | S.member pos' cus = LT      -- if it would go into a #,       it never moves again
-            | S.member pos' has = LT      -- if it would go into a still O, it never moves again
-            | S.member pos' adds = EQ     -- if going intocandidate,        it might keep going - recheck
-            | otherwise = GT              -- otherwise, it goes into . and it will keep going
-            where pos' = direction + pos
+         nextStill = S.map (\x -> x - direction) $ S.union nextOob $ S.intersection nextInb has -- these are still for sure
+
+         moveCandidates = nextInb S.\\ has
+
+         checkAgain = S.map (\x -> x - direction) $ S.intersection moveCandidates adds
+
+         movers = moveCandidates S.\\ adds
+         
+          -- What we need to check:
+          -- 1: all moving into stills become still
+          -- 2: all moving into # become still -> done by initializing with cubes and removing them at the end
+          -- 3: all moving out of bounds become still
+          -- 4: all moving into current candidates get rechecked
+          -- 5: all the rest increment and get rechecked
+
+          
+          -- (still, checkAgain, moving) = partition3 isFree adds
+          -- -- Partitioning into these that are never moving again, that might move, and that are moving
+          -- 
+          -- moved = S.map (+direction) moving -- The new coordinates of the points that are moving
+          -- -- Those who have just moved are always candidates for more movement
+          -- 
+          -- isFree pos
+          --   | not $ inBounds ds pos' = LT -- if it would go out of bounds,  it never moves again
+          --   | S.member pos' cus = LT      -- if it would go into a #,       it never moves again
+          --   | S.member pos' has = LT      -- if it would go into a still O, it never moves again
+          --   | S.member pos' adds = EQ     -- if going into candidate,       it might keep going - recheck
+          --   | otherwise = GT              -- otherwise, it goes into . and it will keep going
+          --   where pos' = direction + pos
               
 rollNorth = roll (-1, 0)
 rollSouth = roll (1, 0)
