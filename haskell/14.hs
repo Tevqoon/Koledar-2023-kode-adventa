@@ -1,7 +1,8 @@
 import Data.List
-import Debug.Trace
+import Debug.Trace qualified as T
 import Data.Maybe
--- import Data.Matrix
+import Data.Matrix as A
+import Data.NumInstances.Tuple
 import Data.Bifunctor (bimap)
 import Data.Set qualified as S
 import Data.Map.Strict qualified as M
@@ -9,39 +10,65 @@ import Data.Map.Strict qualified as M
 -- type Board = Matrix Char
 -- type Board = M.Map (Int, Int) Char
 type Coord = (Int, Int)
+type Coords = S.Set Coord
 type Dimensions = (Int, Int)
 data Board = Board {circles :: S.Set Coord, cubes :: S.Set Coord, dimensions :: Dimensions} deriving (Eq, Ord, Show)
+
+boardToMat :: Board -> Matrix Char
+boardToMat b@(Board cis cus (dx, dy)) = A.mapPos (\pos _ -> if (pos-(1,1)) `S.member` cis then 'O' else
+                                               if (pos-(1,1)) `S.member` cus then '#' else '.') (A.zero dx dy)
+
+printList :: [String] -> IO ()
+printList l = (mapM_ putStrLn l) >> (putStrLn "")
+
+printBoard = printList . toLists . boardToMat
 
 inBounds :: Dimensions -> Coord -> Bool
 inBounds (xm, ym) (x, y) = 0 <= x && x < xm && 0 <= y && y < ym
 
-isFree :: Coord -> Board -> Bool
-isFree pos (Board cis cus ds)
-  | not $ inBounds ds pos = False
-  | otherwise             = S.notMember pos cis && S.notMember pos cus
+-- isFree :: Dimensions -> Coords -> Coords -> Coord -> Coord -> Bool
+-- isFree ds cis cus direction pos
+--   | not $ inBounds ds (direction + pos) = False
+--   | otherwise = S.notMember pos cis && S.notMember pos cus
 
 parse :: [String] -> Board
 parse b = (Board (S.fromList circles) (S.fromList squares) dims)
   where coords = [(c, (x, y)) | (l, x) <- zip b [0..], (c, y) <- zip l [0..], c /= '.']
         (circles, squares) = bimap (map snd) (map snd) $ partition (\(c, _) -> c == 'O') coords
-        dims = bimap (succ . maximum) (succ . maximum) $ unzip $ map snd coords       
+        dims = bimap (succ . maximum) (succ . maximum) $ unzip $ map snd coords
 
 getLoad :: Board -> Int
 getLoad (Board cis cus (xm, ym)) = S.foldr (\(x, y) s -> s + xm - x) 0 cis
 
--- Fixed point starting with some value
-fix :: Eq a => (a -> a) -> a -> a
-fix = until =<< ((==) =<<)
+coordUpdate :: Coords -> Coords -> Coords -> Coords
+coordUpdate coords toRemove toAdd = S.union toAdd $ coords S.\\ toRemove
 
--- The direction is encoded as a pair
-rollOne :: Coord -> Board -> Board
-rollOne (x', y') b@(Board cis cus ds) = Board (S.map new_state cis) cus ds
+-- Premature optimization is the root of all evil.
+partition3 :: (a -> Ordering) -> S.Set a -> (S.Set a, S.Set a, S.Set a)
+partition3 f s = (S.filter (\x -> f x == LT) s, S.filter (\x -> f x == EQ) s, S.filter (\x -> f x == GT) s)
+
+roll :: Coord -> Board -> Board
+roll direction@(dx, dy) b@(Board cis cus ds) = Board (rollThese cis cis) cus ds
   where
-    new_state (x, y) | isFree (x' + x, y' + y) b = (x' + x, y' + y) 
-    new_state symb = symb
-
--- roll :: Coord -> Board -> Board
--- roll dir board = fix (rollOne dir) board
+    rollThese :: Coords -> Coords -> Coords 
+    rollThese has adds 
+      | S.null adds = has
+      | otherwise   = rollThese (coordUpdate has moving moved) (S.union moved goodChecks)
+        where
+          (still, checkAgain, moving) = partition3 (isFree . (+direction)) adds
+          moved = S.map (+direction) moving
+          goodChecks = S.filter (\x -> (x + direction) `S.member` checkAgain || (x + direction) `S.member` moving) checkAgain
+          -- Those over the edge or moving into # are never moving again.
+          -- Those that are moving into O need to be checked again.
+          -- TODO: Make sure to account for fixed elements; something like remove those that still can't move
+          -- and have been there last turn already
+          -- Those with free spaces are free to move
+          isFree pos
+            | not $ inBounds ds pos = LT
+            | S.member pos cus = LT
+            | S.member pos has = EQ
+            | otherwise = GT
+              
 
 rollNorth = roll (-1, 0)
 rollSouth = roll (1, 0)
@@ -54,11 +81,8 @@ solver1 = getLoad . rollNorth
 oneCycle :: Board -> Board
 oneCycle = rollEast . rollSouth . rollWest . rollNorth
   
-printList :: [String] -> IO ()
-printList l = (mapM_ putStrLn l) >> (putStrLn "")
-
 findFirstDuplicate :: Eq a => [a] -> (Int, Int)
-findFirstDuplicate lst = (org, rep)
+findFirstDuplicate lst = T.trace (show (org, rep)) (org, rep)
   where rep = fromJust $ findIndex id $ zipWith elem lst (inits lst)
         org = fromJust $ elemIndex (lst !! rep) lst
 
