@@ -1,58 +1,74 @@
 import Data.List
 import Debug.Trace
 import Data.Maybe
+import Data.Matrix
+import Data.Array
+import Data.Map.Strict qualified as M
 
 loadLine d l = d * (length $ filter (=='O') $ l)
 
 getLoad :: [String] -> Int
 getLoad xs = sum $ zipWith loadLine [1..] $ reverse xs
 
-rollOneUnit :: Char -> Char -> (Char, Char)
-rollOneUnit 'O' '.' = ('.', 'O')
-rollOneUnit x y = (x, y)
+getLoadM :: Matrix Char -> Int
+getLoadM m = sum $ toList $ mapPos (\(x, y) v -> if v == 'O' then l - x + 1 else 0) m
+  where l = length $ toLists m
 
--- first argument rolls into the second one
-rollOneLine :: String -> String -> (String, String)
-rollOneLine from to = unzip $ zipWith rollOneUnit from to
+-- A safe get which takes in a pair instead of two values
+safeGet1 :: Matrix a -> (Int, Int) -> Maybe a
+safeGet1 m (x, y) = safeGet x y m
 
--- Rolls the new string into the rest of them, recursively
-rollOne :: String -> [String] -> [String]
-rollOne x [] = [x]
-rollOne x (y:ys) = x' : (rollOne y' ys)
-  where (x', y') = rollOneLine x y
+-- Fixed point starting with some value
+fix :: Eq a => (a -> a) -> a -> a
+fix = until =<< ((==) =<<)
 
-rollNorth :: [String] -> [String]
-rollNorth = aux []
+-- The direction is encoded as a pair
+rollOneM :: (Int, Int) -> Matrix Char -> Matrix Char
+rollOneM (x, y) board = mapPos new_state board
   where
-    aux a [] = reverse a
-    aux [] (x:xs) = aux [x] xs
-    aux as (x:xs) = aux (rollOne x as) xs
+    new_state (x', y') '.' | (board `safeGet1` (x' - x, y' - y)) == Just 'O' = 'O'
+    new_state (x', y') 'O' | (board `safeGet1` (x' + x, y' + y)) == Just '.' = '.'
+    new_state (x', y') symb = symb
 
-rollSouth = reverse . rollNorth . reverse
+roll dir board = fix (rollOneM dir) board
 
-rollWest = transpose . rollNorth . transpose
-
-rollEast = transpose . reverse . rollNorth . reverse . transpose
-
-solver1 = getLoad . rollNorth
+rollNorth = roll (-1, 0)
+rollSouth = roll (1, 0)
+rollEast = roll (0, 1)
+rollWest = roll (0, -1)
+    
+solver1 = getLoadM . rollNorth
 
 oneCycle = rollEast . rollSouth . rollWest . rollNorth
   
 printList :: [String] -> IO ()
 printList l = (mapM_ putStrLn l) >> (putStrLn "")
 
+findFirstDuplicate :: Eq a => [a] -> (Int, Int)
 findFirstDuplicate lst = (org, rep)
   where rep = fromJust $ findIndex id $ zipWith elem lst (inits lst)
         org = fromJust $ elemIndex (lst !! rep) lst
 
-solver2 n l = getLoad $ allCycles !! first_n
+-- In practice, finding the duplicate is not really a bottleneck as
+-- opposed to the actual rotations.
+
+-- findFirstDuplicate :: (Enum b, Ord k, Num b) => [k] -> (b, b)
+-- findFirstDuplicate lst = aux M.empty lst 0
+--   where
+--     aux seen (x:xs) rep = case foundmaybe of
+--       Nothing  -> aux (M.insert x rep seen) xs (succ rep)
+--       Just org -> (org, rep)
+--       where foundmaybe = M.lookup x seen
+        
+
+solver2 n l = getLoadM $ allCycles !! first_n
   where allCycles = iterate oneCycle l
         (org, rep) = findFirstDuplicate $ allCycles
-        first_n = trace (show (org, rep)) $ org + mod (n - org) (rep - org)
+        first_n = org + mod (n - org) (rep - org)
         
 main :: IO ()
 main = do
-  contents <- lines <$> readFile "../inputs/day14.txt"
+  contents <- (fromLists . lines) <$> readFile "../inputs/day14.txt"
   print $ solver1 contents
   print $ solver2 1000000000 contents
   
