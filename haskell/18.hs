@@ -42,25 +42,33 @@ parse = map lineToInstr
 
 step :: (Board, Coord) -> Instruction -> (Board, Coord)
 step (b, pos) (dir, steps, c) = (b ++ points, fst $ last points)
-  where points = [(pos + (toTuple dir) * (dpos, dpos), c) | dpos <- [1..steps+1]] :: [(Coord, Color)]
+  where points = [(pos + (toTuple dir) * (dpos, dpos), c) | dpos <- [1..steps]] :: [(Coord, Color)]
 
-trench :: [Instruction] -> (Board, Coord)
-trench = foldl' step ([], (0, 0))
+trench :: [Instruction] -> Board
+trench = fst . foldl' step ([], (0, 0))
 
--- Calculates the area of a polygon given the coordinates of its vertices.
--- Very handy to keep in mind.
-shoelace :: [Coord] -> Int
-shoelace points = abs $ (`div` 2) $ sum $ zipWith (*) ysums xdifs
-  where (x:xs, y:ys) = unzip points
-        ysums = zipWith (+) (y:ys) (ys ++ [y])
-        xdifs = zipWith (-) (x:xs) (xs ++ [x])
+rayTest :: [Coord] -> Coord -> Bool
+rayTest cs (cx, cy) = all (\x -> x `mod` 2 == 0) $ map length [updn, ltrt]
+  where
+    ltrt = filter (\(x, y) -> x == cx) cs
+    updn = filter (\(x, y) -> y == cy) cs
 
--- solver1 = shoelace . fst . trench
+countPoints :: Board -> Int
+countPoints b = length $ filter (rayTest points) $ (range (lowBound, higBound)) \\ points
+  where points = map fst b
+        (xs, ys) = unzip points
+        lowBound = (minimum xs, minimum ys)
+        higBound = (maximum xs, maximum ys)
+
+
+solver1 instrs = length t + countPoints t
+  where t = trench instrs
+        
 
 main :: IO ()
 main = do
-  contents <- (parse . lines) <$> readFile "../inputs/day17.txt"
-  print 0
+  contents <- (parse . lines) <$> readFile "../inputs/day18.txt"
+  print $ countPoints $ trench contents
   
 test = parse ["R 6 (#70c710)",
         "D 5 (#0dc571)",
