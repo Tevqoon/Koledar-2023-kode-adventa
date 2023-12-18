@@ -1,13 +1,7 @@
 import Data.NumInstances.Tuple ()
-import Data.Maybe (isJust, fromJust)
-import Data.List
-import Algorithm.Search
-import qualified Debug.Trace as T
 import Data.Char (isHexDigit)
-import Data.Array
-import Data.Map.Strict (Map)
-import Numeric
-import qualified Data.Map.Strict as M
+import Data.Ix (Ix, range)
+import Numeric (readHex)
 
 type Coord = (Int, Int)
 data Direction = N | S | E | W deriving (Show, Eq, Enum, Ord, Ix)
@@ -64,7 +58,7 @@ step (b, pos) (dir, steps) = (b ++ [point], point)
 
 -- Gives the boundary points of the dug trench
 trench :: [Instruction] -> Board
-trench = fst . foldl' step ([], (0, 0))
+trench = fst . foldl step ([], (0, 0))
 
 -- Calculates the area of a polygon given the coordinates of its vertices.
 shoelace :: [Coord] -> Int
