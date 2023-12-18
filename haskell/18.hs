@@ -3,21 +3,22 @@ import Data.Maybe (isJust, fromJust)
 import Data.List
 import Algorithm.Search
 import qualified Debug.Trace as T
-import Data.Char (intToDigit)
+import Data.Char (isHexDigit)
 import Data.Array
 import Data.Map.Strict (Map)
+import Numeric
 import qualified Data.Map.Strict as M
 
 type Coord = (Int, Int)
 data Direction = N | S | E | W deriving (Show, Eq, Enum, Ord, Ix)
 type Color = String
-type Instruction = (Direction, Int, Color)
-type Board = [(Coord, Color)]
+type Instruction = (Direction, Int)
+type Board = [Coord]
 
 printBoard :: Board -> IO ()
-printBoard b = mapM_ putStrLn [[if (x, y) `elem` points then '#' else '.' | y <- [y1..y2]] | x <- [x1..x2]]
+printBoard points = mapM_ putStrLn [[if (x, y) `elem` points then '#' else '.'
+                                    | y <- [y1..y2]] | x <- [x1..x2]]
   where
-    points = map fst b
     (xs, ys) = unzip points
     (x1, x2) = (minimum xs, maximum xs)
     (y1, y2) = (minimum ys, maximum ys)
@@ -35,42 +36,66 @@ charToDir "L" = W
 charToDir "R" = E
 
 lineToInstr :: String -> Instruction
-lineToInstr l = (charToDir dirchar, read amount, color)
+lineToInstr l = (charToDir dirchar, read amount)
   where [dirchar, amount, color] = words l
 
+numToDir "0" = E
+numToDir "1" = S
+numToDir "2" = W
+numToDir "3" = N
+
+lineToInstr' :: String -> Instruction
+lineToInstr' l = (direction, hexamount)
+  where [dirchar, amount, color] = words l
+        instr' = filter isHexDigit color
+        direction = numToDir $ pure (last instr')
+        hexamount = fst $ head $ readHex $ init instr'
+
+parse :: [String] -> [Instruction]
 parse = map lineToInstr
 
-step :: (Board, Coord) -> Instruction -> (Board, Coord)
-step (b, pos) (dir, steps, c) = (b ++ points, fst $ last points)
-  where points = [(pos + (toTuple dir) * (dpos, dpos), c) | dpos <- [1..steps]] :: [(Coord, Color)]
+parse' :: [String] -> [Instruction]
+parse' = map lineToInstr'
 
+-- Adds the next boundary point from the given instruction
+step :: (Board, Coord) -> Instruction -> (Board, Coord)
+step (b, pos) (dir, steps) = (b ++ [point], point)
+  where point = pos + (toTuple dir) * (steps, steps)
+
+-- Gives the boundary points of the dug trench
 trench :: [Instruction] -> Board
 trench = fst . foldl' step ([], (0, 0))
 
-rayTest :: [Coord] -> Coord -> Bool
-rayTest cs (cx, cy) = all (\x -> x `mod` 2 == 0) $ map length [updn, ltrt]
-  where
-    ltrt = filter (\(x, y) -> x == cx) cs
-    updn = filter (\(x, y) -> y == cy) cs
+-- Calculates the area of a polygon given the coordinates of its vertices.
+shoelace :: [Coord] -> Int
+shoelace points = abs $ (`div` 2) $ sum $ zipWith (*) ysums xdifs
+  where (x:xs, y:ys) = unzip points
+        ysums = zipWith (+) (y:ys) (ys ++ [y])
+        xdifs = zipWith (-) (x:xs) (xs ++ [x])        
 
-countPoints :: Board -> Int
-countPoints b = length $ filter (rayTest points) $ (range (lowBound, higBound)) \\ points
-  where points = map fst b
-        (xs, ys) = unzip points
-        lowBound = (minimum xs, minimum ys)
-        higBound = (maximum xs, maximum ys)
+-- Integer points inside the area with the given number of boundary points
+pickInside :: Int -> Int -> Int
+pickInside area boundary = area - (boundary `div` 2) + 1
 
+tupleToNum :: Coord -> Int
+tupleToNum (a, b) = abs a + abs b
 
-solver1 instrs = length t + countPoints t
-  where t = trench instrs
-        
+-- Gives the number of boundary points from a list of vertices
+boundaryLength :: [Coord] -> Int
+boundaryLength (p:ps) = sum $ map tupleToNum $ zipWith (-) (p:ps) (ps ++ [p])
+
+solver instructions = boundary + pickInside area boundary
+  where points = trench instructions
+        boundary = boundaryLength points 
+        area = shoelace points
 
 main :: IO ()
 main = do
-  contents <- (parse . lines) <$> readFile "../inputs/day18.txt"
-  print $ countPoints $ trench contents
+  contents <- lines <$> readFile "../inputs/day18.txt"
+  print $ solver $ parse  contents
+  print $ solver $ parse' contents
   
-test = parse ["R 6 (#70c710)",
+test = ["R 6 (#70c710)",
         "D 5 (#0dc571)",
         "L 2 (#5713f0)",
         "D 2 (#d2c081)",
@@ -85,4 +110,4 @@ test = parse ["R 6 (#70c710)",
         "L 2 (#015232)",
         "U 2 (#7a21e3)"]
 
-tinytest = parse ["R 2 1", "D 2 2", "L 2 3", "U 2 4"]
+tinytest = parse ["R 2 1", "D 2 2", "R 1 3", "D 2 4", "L 3 5", "U 4 6"]
