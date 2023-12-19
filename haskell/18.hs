@@ -33,6 +33,7 @@ lineToInstr :: String -> Instruction
 lineToInstr l = (charToDir dirchar, read amount)
   where [dirchar, amount, color] = words l
 
+numToDir :: String -> Direction
 numToDir "0" = E
 numToDir "1" = S
 numToDir "2" = W
@@ -78,6 +79,7 @@ tupleToNum (a, b) = abs a + abs b
 boundaryLength :: [Coord] -> Int
 boundaryLength (p:ps) = sum $ map tupleToNum $ zipWith (-) (p:ps) (ps ++ [p])
 
+solver :: [Instruction] -> Int
 solver instructions = boundary + pickInside area boundary
   where points = trench instructions
         boundary = boundaryLength points 

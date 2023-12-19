@@ -24,7 +24,7 @@ toTuple :: Direction -> Coord
 toTuple N = (-1, 0)
 toTuple S = (1, 0)
 toTuple E = (0, 1)
-toTuple W = (0, -1)
+  toTuple W = (0, -1)
 
 revDir :: Direction -> Direction
 revDir N = S
