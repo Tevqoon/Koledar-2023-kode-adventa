@@ -65,7 +65,7 @@ solver2 board = fst <$> search
   where
     search = searcher ((1, 1), N, 0)
     
-    bbounds@(lbound, upbound) = bounds board
+    bbounds@(lbound, upbound) = bounds board2
     searcher = dijkstra neighbors
                (\_ (pos, _, _) -> board ! pos)
                (\(pos, _, n) -> pos == upbound && n <= 7)
