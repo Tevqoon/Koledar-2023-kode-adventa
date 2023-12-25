@@ -90,12 +90,12 @@ bfs mat stopCon s = paths
           put going
           go
 
-type JuncPath = [(Coord, Int)]
+type JuncPath = (Coord, Set Coord, Int)
 
 junctionPaths :: Graph -> Coord -> Coord -> [JuncPath]
 junctionPaths g s e = paths
   where
-    (_, paths', paths) = runRWS go () ([[(s, 0)]])
+    (_, paths', paths) = runRWS go () ([(s, S.singleton s, 0)])
     go :: RWS () ([JuncPath]) ([JuncPath]) ()
     go = do
       paths <- get
@@ -103,21 +103,18 @@ junctionPaths g s e = paths
         [] -> return ()
         otherwise -> do
           let newPaths = paths >>= extend
-          let (finished, going) = partition ((==e) . fst . head) newPaths
+          let (finished, going) = partition (\(_, s, _) -> S.member e s) newPaths
           tell finished
           put going
           go
     extend :: JuncPath -> [JuncPath]
-    extend path@(x:xs) = [ n : path | n <- removeSeen (neighs x) path]
+    extend (current, seen, count) = [ (next, S.insert next seen, count + size) | (next, size) <- removeIfSeen (g M.! current) seen]
 
-    removeSeen new path = filter (\(pos, c) -> not $ pos `elem` coords) new
-      where coords = map fst path
-
-    neighs :: (Coord, Int) -> [(Coord, Int)]
-    neighs (s, n) = g M.! s
+    removeIfSeen :: [(Coord, Int)] -> Set Coord -> [(Coord, Int)]
+    removeIfSeen new seen = filter (\(x, val) -> not $ S.member x seen) new
 
 sumPath :: JuncPath -> Int
-sumPath = sum . map snd
+sumPath (_, _, c) = c
           
 solver1 (s, e, m) = maximum $ map sumPath $ junctionPaths (getJunctions (s, e, m)) s e
 solver2 (s, e, m) = solver1 (s, e, m')
